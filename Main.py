@@ -1,4 +1,5 @@
-#import requests
+import random
+import requests
 import base64
 import os
 import sys
@@ -300,6 +301,47 @@ def send_files_to_crystals():
             # r = requests.post(url, data=data, headers=headers)
             # print(r)
             # print(r.text)
+
+
+# OUT. Отправить марки в SetMark (erp/add_mark)
+def send_files_to_setmark(SubObjectID, Mark):
+    # Загрузка списка марок из внешней системы
+    # https://crystals.atlassian.net/wiki/spaces/SR10SUPPORT/pages/785940525/SetMark+API+ERP
+
+    # Если указали марку - выгрузить только её
+    filter = " and E.SubObjectID = " + str(SubObjectID)
+    if Mark:
+        filter = filter + " and E.MarkCode = '" + str(Mark) + "'"
+
+    api_utils.InsertLog('Забираем марки из базы')
+    query_mark = "select E.MarkCode as excise, E.AlcCode as alcocode, B.BarCode as barcode, E.GoodsID as item " \
+            " from egais_RestBCode_v3View E" \
+            " left join BarCode B on B.Goods_ID=E.GoodsID" \
+            " where isnull(E.Quantity,0)<>0 " + filter
+
+    df_mark = api_utils.select_query(query_mark, login_sql, password_sql, server_sql, driver_sql, database, isList=False)
+
+    api_utils.InsertLog('Всего марок: ' + str(len(df_mark)))
+
+    # Уникальный идентификатор пакета
+    id_pack = int(random.uniform(1, 100000))
+
+    dict_mark = {"id": id_pack, "version": 1, "inn": inn, "shop": SubObjectID, "operationType": 1, "productType": 1,
+                 "data": df_mark.to_dict(orient='records')}
+    print(dict_mark)
+
+    file = json.dumps(dict_mark, ensure_ascii=False)
+    print(file)
+
+    # Отправка файла с марками в SetMark
+    url = url_srv_setmark + "/erp/add_mark"
+    headers = {'Content-Type': 'application/json'}
+    error = 0
+
+    r = requests.post(url, data=file, headers=headers, verify=False, timeout=200)  #headers=headers,json.dumps(file_dict)
+    print(r)
+
+    api_utils.InsertLog('Ответ: ' + str(r.status_code))
 
 
 # IN. Получить продажи за период
@@ -986,6 +1028,8 @@ if __name__ == '__main__':
             mails = settings["mails_to_send"].split()
             shared_folder = settings["shared_folder"]
             url_srv = settings["url_srv"]
+            url_srv_setmark = settings["url_srv_setmark"]
+            inn = settings["inn"]
         except:
             api_utils.InsertLog('Ошибка при получении настроек')
             time.sleep(3)
@@ -998,6 +1042,15 @@ if __name__ == '__main__':
         # api_utils.InsertLog('Успешно')
 
         # !!!
+        # OUT. Отпавить марки в set mark
+        api_utils.InsertLog('Экспорт. Отправка марок в set mark')
+        SubObjectID = 29591
+        mark = '187317313702581222001JSRR6RR4SK45V4M37FXU5HTNWY4GKI7FISIGXQGRBXGNJGCFTNDEVBUUPG2UJRPF2TNYF7N5MRNOKVUHIP3RM5YSWFEL7RC3GUEW42K2JJEQHOMSMV3T3CJE7RLXR2CHI'
+        send_files_to_setmark(SubObjectID, mark)
+
+
+
+        # !!!
         # IN. Получить данные о продажах из Crystals за период
         # date_begin = '2024-09-03'
         # date_end = '2024-09-03T23:59:00.000'
@@ -1006,15 +1059,18 @@ if __name__ == '__main__':
 
         # !!!
         # IN. Получить данные о продажах из Crystals за операционный день (для сверки - всё ли есть в базе)
-        OperDay = '2024-09-03'
-        api_utils.InsertLog('Импорт. Получаем данные о продажах из Crystals за операционный день: ' + str(OperDay))
-        getPurchasesByOperDay(url_srv, OperDay)
+        # OperDay = '2024-09-03'
+        # api_utils.InsertLog('Импорт. Получаем данные о продажах из Crystals за операционный день: ' + str(OperDay))
+        # getPurchasesByOperDay(url_srv, OperDay)
 
         # !!!
         # IN. Получить данные о z-отчётах из Crystals за операционный день
         # OperDay = '2024-09-03'
         # api_utils.InsertLog('Импорт. Получаем данные z-отчётов из Crystals за операционный день: ' + str(OperDay))
         # getZReportsByOperDay(url_srv, OperDay)
+
+
+
 
         # sys.exit()
 
